@@ -1,4 +1,7 @@
 package com.mycompany.mavenproject1;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.EOFException;
 import java.util.ArrayList;
 import javax.swing.JOptionPane;
@@ -9,14 +12,21 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.JFileChooser;
 import java.io.Serializable;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.List;
+import javax.swing.SwingWorker;
 /*
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/GUIForms/JFrame.java to edit this template
@@ -29,7 +39,22 @@ import java.util.List;
  */
 public class NewJFrame extends javax.swing.JFrame {
 
+   
+    
     private static double globalResult = 0.0;
+    private static double globalUpperLimit = 0.0;
+    private static double globalLowerLimit = 0.0;
+    private static double globalStep = 0.0;
+    private static double globalPart = 0.0;
+    
+      public double getglobalUpperLimit(){
+        return globalUpperLimit;
+    }
+    
+    public void setglobalUpperLimit(double _globalUpperLimit){
+        this.globalUpperLimit = _globalUpperLimit;
+    }
+    
     
     public static void addToGlobalResult(double value) {
         globalResult += value; // Суммируем результаты всех потоков
@@ -429,77 +454,173 @@ public class NewJFrame extends javax.swing.JFrame {
 
     //"Вычислить"
     private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
-        // TODO add your handling code here:
-        int selectedRow = jTable1.getSelectedRow();
-        
-        if (selectedRow == -1){
-            JOptionPane.showMessageDialog(this, "Выберите строку для вычисления", "Ошибка", javax.swing.JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        
-        double dLowerLimitValue = (double) jTable1.getValueAt(selectedRow, 0);
-        double dUpperLimitValue = (double) jTable1.getValueAt(selectedRow, 1);
-        double dStepValue = (double) jTable1.getValueAt(selectedRow, 2);
-        
-        //создание потоков
-        List<JThread> threads = new ArrayList<>();
-        int numberOfThreads = 10; 
-        setGlobalResultInNull();
-         
-        double integralPart = (dUpperLimitValue - dLowerLimitValue)/numberOfThreads;
-        double dUpperLimitValueThread = dUpperLimitValue;
-        double dLowerLimitValueThread = dLowerLimitValue;
-        
-        // Запускаем таймер перед началом потоков
-        long startTime = System.nanoTime();
-        for (int i = 0; i < numberOfThreads; i++) {
-            dUpperLimitValueThread = dLowerLimitValueThread + integralPart;
-            JThread thread = new JThread("JThread" + (i + 1), dLowerLimitValueThread, dUpperLimitValueThread, dStepValue);
-            dLowerLimitValueThread += integralPart;
-            thread.start();
-            threads.add(thread);
-        }
-        
-        for (JThread thread : threads) {
-            try {                
-                thread.join();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt(); // Восстановление статуса прерывания
-                JOptionPane.showMessageDialog(this, "Ошибка при ожидании завершения потоков", "Ошибка", javax.swing.JOptionPane.ERROR_MESSAGE);
+    
+
+    
+
+    SwingWorker<Void, Double> worker = new SwingWorker<Void, Double>() {
+        @Override
+        protected Void doInBackground() throws Exception {
+            try (ServerSocket s = new ServerSocket(PORT)) {
+                System.out.println("Started: " + s);
+                while (true) {
+                    try (Socket socket = s.accept()) {
+                        System.out.println("connect: " + socket);
+                        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                        PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+
+                        
+                        int selectedRow = jTable1.getSelectedRow();
+                        double dLowerLimitValue = (double) jTable1.getValueAt(selectedRow, 0);
+                        double dUpperLimitValue = (double) jTable1.getValueAt(selectedRow, 1);
+                        double dStepValue = (double) jTable1.getValueAt(selectedRow, 2);
+    
+                        
+                        
+                        out.println(dLowerLimitValue);
+                        out.println(dUpperLimitValue);
+                        out.println(dStepValue);
+
+                        String str;
+                        while ((str = in.readLine()) != null) {
+                            System.out.println("from client: " + str);
+                            
+                            if (str.equals("END")) {
+                                double dSum = getGlobalResult();
+                                jTable1.setValueAt(dSum, selectedRow, 3);
+
+                                classRecIntegral modifiableObject = arrayRecIntegral.get(selectedRow);
+                                modifiableObject.setRezult(dSum);
+                                setGlobalResultInNull();
+                                break;
+                            }   
+                            else{
+                            addToGlobalResult(Double.parseDouble(str));
+                            out.println(str); 
+                            }
+                        }
+                       
+                    } catch (Exception e) {
+                        System.out.println("ex:" + e.getMessage());
+                    }
+                }
             }
+
         }
-        long endTime = System.nanoTime();
-        System.out.printf("global (rezult of all thread) %f\n", getGlobalResult());
-        System.out.printf("time of all threads: %.2f\n", (endTime - startTime) / 1_000_000.0);
-         
+    };
+
+    worker.execute();
+
+            
+//        //создание потоков
+//        List<JThread> threads = new ArrayList<>();
+//        int numberOfThreads = 2;
+//        setGlobalResultInNull();
+//
+//        double integralPart = (dUpperLimitValue - dLowerLimitValue)/numberOfThreads;
+//        double dUpperLimitValueThread = dUpperLimitValue;
+//        double dLowerLimitValueThread = dLowerLimitValue;
+//
+//        // Запускаем таймер перед началом потоков
+//        long startTime = System.nanoTime();
+//        for (int i = 0; i < numberOfThreads; i++) {
+//            dUpperLimitValueThread = dLowerLimitValueThread + integralPart;
+//            JThread thread = new JThread("JThread" + (i + 1), dLowerLimitValueThread, dUpperLimitValueThread, dStepValue);
+//            dLowerLimitValueThread += integralPart;
+//            thread.start();
+//            threads.add(thread);
+//        }
+//
+//        for (JThread thread : threads) {
+//            try {
+//                thread.join();
+//            } catch (InterruptedException e) {
+//                Thread.currentThread().interrupt(); // Восстановление статуса прерывания
+//                JOptionPane.showMessageDialog(this, "Ошибка при ожидании завершения потоков", "Ошибка", javax.swing.JOptionPane.ERROR_MESSAGE);
+//            }
+//        }
+//        long endTime = System.nanoTime();
+//        System.out.printf("global (rezult of all thread) %f\n", getGlobalResult());
+//        System.out.printf("time of all threads: %.2f\n", (endTime - startTime) / 1_000_000.0);
+//
+//
+//
+//        //цикл для вычисления
+//        double dLastStep = 0.0, dSum = 0.0;
+//        double dIterationCountWhole = (dUpperLimitValue - dLowerLimitValue)/dStepValue;
+//        double dIterationCountWithRest = (dUpperLimitValue - dLowerLimitValue)%dStepValue;
+//        dIterationCountWhole = dIterationCountWhole - dIterationCountWithRest;
+//        dLastStep = dIterationCountWithRest;
+//        double dTempA = dLowerLimitValue;
+//
+//        long startTime1 = System.nanoTime();
+//        for (int i = 0; i < dIterationCountWhole; i++){
+//            dSum = dSum + dStepValue/2*((1/dTempA) + (1/(dTempA+dStepValue)));
+//            dTempA = dTempA + dStepValue;
+//        }
+//
+//        if (dLastStep > 0){
+//            dSum = dSum + ((1/dTempA) + (1/(dTempA + dLastStep)))*dLastStep/2;
+//        }
+//        long endTime1 = System.nanoTime();
+//        System.out.printf("time of one thread (main thread): %.2f\n\n", (endTime1 - startTime1) / 1_000_000.0);
+
+
+        //dSum
         
         
-        //цикл для вычисления
-        double dLastStep = 0.0, dSum = 0.0;
-        double dIterationCountWhole = (dUpperLimitValue - dLowerLimitValue)/dStepValue;
-        double dIterationCountWithRest = (dUpperLimitValue - dLowerLimitValue)%dStepValue;
-        dIterationCountWhole = dIterationCountWhole - dIterationCountWithRest;
-        dLastStep = dIterationCountWithRest;
-        double dTempA = dLowerLimitValue;
-        
-        long startTime1 = System.nanoTime();
-        for (int i = 0; i < dIterationCountWhole; i++){
-            dSum = dSum + dStepValue/2*((1/dTempA) + (1/(dTempA+dStepValue)));
-            dTempA = dTempA + dStepValue;
-        }
-        
-        if (dLastStep > 0){
-            dSum = dSum + ((1/dTempA) + (1/(dTempA + dLastStep)))*dLastStep/2;
-        }
-        long endTime1 = System.nanoTime();
-        System.out.printf("time of one thread (main thread): %.2f\n\n", (endTime1 - startTime1) / 1_000_000.0);
-       
-        jTable1.setValueAt(dSum, selectedRow, 3);
-        
-        //adding rezult in Class
-        classRecIntegral modifiableObject = arrayRecIntegral.get(selectedRow);
-        modifiableObject.setRezult(dSum);
-        //modifiableObject.AddRezult(dSum);
+//        //создание потоков
+//        List<JThread> threads = new ArrayList<>();
+//        int numberOfThreads = 2; 
+//        setGlobalResultInNull();
+//         
+//        double integralPart = (dUpperLimitValue - dLowerLimitValue)/numberOfThreads;
+//        double dUpperLimitValueThread = dUpperLimitValue;
+//        double dLowerLimitValueThread = dLowerLimitValue;
+//        
+//        // Запускаем таймер перед началом потоков
+//        long startTime = System.nanoTime();
+//        for (int i = 0; i < numberOfThreads; i++) {
+//            dUpperLimitValueThread = dLowerLimitValueThread + integralPart;
+//            JThread thread = new JThread("JThread" + (i + 1), dLowerLimitValueThread, dUpperLimitValueThread, dStepValue);
+//            dLowerLimitValueThread += integralPart;
+//            thread.start();
+//            threads.add(thread);
+//        }
+//        
+//        for (JThread thread : threads) {
+//            try {                
+//                thread.join();
+//            } catch (InterruptedException e) {
+//                Thread.currentThread().interrupt(); // Восстановление статуса прерывания
+//                JOptionPane.showMessageDialog(this, "Ошибка при ожидании завершения потоков", "Ошибка", javax.swing.JOptionPane.ERROR_MESSAGE);
+//            }
+//        }
+//        long endTime = System.nanoTime();
+//        System.out.printf("global (rezult of all thread) %f\n", getGlobalResult());
+//        System.out.printf("time of all threads: %.2f\n", (endTime - startTime) / 1_000_000.0);
+//         
+//        
+//        
+//        //цикл для вычисления
+//        double dLastStep = 0.0, dSum = 0.0;
+//        double dIterationCountWhole = (dUpperLimitValue - dLowerLimitValue)/dStepValue;
+//        double dIterationCountWithRest = (dUpperLimitValue - dLowerLimitValue)%dStepValue;
+//        dIterationCountWhole = dIterationCountWhole - dIterationCountWithRest;
+//        dLastStep = dIterationCountWithRest;
+//        double dTempA = dLowerLimitValue;
+//        
+//        long startTime1 = System.nanoTime();
+//        for (int i = 0; i < dIterationCountWhole; i++){
+//            dSum = dSum + dStepValue/2*((1/dTempA) + (1/(dTempA+dStepValue)));
+//            dTempA = dTempA + dStepValue;
+//        }
+//        
+//        if (dLastStep > 0){
+//            dSum = dSum + ((1/dTempA) + (1/(dTempA + dLastStep)))*dLastStep/2;
+//        }
+//        long endTime1 = System.nanoTime();
+//        System.out.printf("time of one thread (main thread): %.2f\n\n", (endTime1 - startTime1) / 1_000_000.0);
     }//GEN-LAST:event_jButton2ActionPerformed
 
     //"Очистить"
@@ -656,9 +777,46 @@ public class NewJFrame extends javax.swing.JFrame {
     }//GEN-LAST:event_jButton9ActionPerformed
 
     /**
-     * @param args the command line arguments
      */
-    public static void main(String args[]) {
+    
+    
+//    private static void handleClient(Socket socket) {
+//        try (
+//                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+//                PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+//        ) {
+//            // Отправка значений
+//            double dLowerLimitValue = 1;
+//            double dUpperLimitValue = 10.0;
+//            double dStepValue = 0.5;
+//
+//            out.println(dLowerLimitValue);
+//            out.println(dUpperLimitValue);
+//            out.println(dStepValue);
+//
+//            String str;
+//            while ((str = in.readLine()) != null) {
+//                System.out.println("from client: " + str);
+//                addToGlobalResult(Double.parseDouble(str));
+//                out.println(str); // Отправка обратно измененного значения для клиента
+//                // if (str.equals("END")) break;
+//            }
+//        } catch (Exception e) {
+//            System.out.println("401: " + e.getMessage());
+//        } finally {
+//            try {
+//                socket.close(); // Закрыть сокет клиента
+//                System.out.println("close");
+//            } catch (Exception e) {
+//                System.out.println("error close: " + e.getMessage());
+//            }
+//        }
+//    }
+    
+    // Выбираем порт вне пределов 1-1024:
+    public static final int PORT = 8080;
+    
+    public static void main(String args[]) throws IOException {
         /* Set the Nimbus look and feel */
         //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
         /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
@@ -686,6 +844,53 @@ public class NewJFrame extends javax.swing.JFrame {
         java.awt.EventQueue.invokeLater(() -> {
             new NewJFrame().setVisible(true);
         });
+        
+ 
+  
+        //
+    
+        
+        
+//        try {                                                                       // Блокирует до тех пор, пока не возникнет соединение:
+//            Socket socket = s.accept();
+//            try {
+//                System.out.println("Connection accepted: " + socket);
+//                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+//                
+//                // Вывод автоматически выталкивается из буфера PrintWriter'ом
+//                PrintWriter out = new PrintWriter(new BufferedWriter(
+//                new OutputStreamWriter(socket.getOutputStream())), true);
+//                
+//                 // Отправка значений
+//                double dLowerLimitValue = 1;
+//                double dUpperLimitValue = 10.0;
+//                double dStepValue = 0.5;
+//                
+//
+//                out.println(dLowerLimitValue);
+//                out.println(dUpperLimitValue);
+//                out.println(dStepValue);
+//                
+//                while (true) {
+//                    String str = in.readLine();
+//                    //if (str.equals("END2"))
+//                    //break;
+//                    System.out.println("From client: " + str);
+//                    addToGlobalResult(Double.parseDouble(str));
+//                    out.println(str);
+//                }
+//            }                                                                       // Всегда закрываем два сокета...
+//            finally {
+//                //System.out.println("closing...");
+//                //socket.close();
+//                
+//            }
+//        }
+//        finally {
+//            s.close();
+//       
+//        }       
+        
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
