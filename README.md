@@ -1,1 +1,1 @@
-# java_lab
+# java_labs
